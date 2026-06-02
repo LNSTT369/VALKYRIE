@@ -1,0 +1,36 @@
+{
+  "name": "nightwatcher",
+  "version": "0.1.0",
+  "description": "Cloudflare Workers MCP server for autonomous stock trading with Alpaca",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc",
+    "deploy": "wrangler deploy",
+    "deploy:production": "wrangler deploy --env production",
+    "db:migrate": "wrangler d1 migrations apply nightwatcher-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply nightwatcher-db --remote",
+    "db:studio": "wrangler d1 execute nightwatcher-db --local --command 'SELECT 1'",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "agents": "^0.3.6",
+    "openai": "^6.16.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.18",
+    "wrangler": "^4.61.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

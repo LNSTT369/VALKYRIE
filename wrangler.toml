@@ -1,0 +1,118 @@
+name = "nightwatcher"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ============================================================================
+# Environment Variables (non-secret)
+# ============================================================================
+[vars]
+ENVIRONMENT = "development"
+# Feature flags
+FEATURE_LLM_RESEARCH = "true"
+FEATURE_OPTIONS = "true"
+# Default policy (can be overridden in D1)
+DEFAULT_MAX_POSITION_PCT = "0.20"
+DEFAULT_MAX_NOTIONAL_PER_TRADE = "10000"
+DEFAULT_MAX_DAILY_LOSS_PCT = "0.02"
+DEFAULT_COOLDOWN_MINUTES = "30"
+DEFAULT_MAX_OPEN_POSITIONS = "10"
+DEFAULT_APPROVAL_TTL_SECONDS = "300"
+
+# ============================================================================
+# Secrets (set via `wrangler secret put <NAME>`)
+# ============================================================================
+# ALPACA_API_KEY        - Alpaca API key
+# ALPACA_API_SECRET     - Alpaca API secret
+# ALPACA_PAPER          - "true" for paper trading (default), "false" for live
+# OPENAI_API_KEY        - OpenAI API key (optional, for LLM features)
+# GEMINI_API_KEY        - Google Gemini API key (optional, for LLM features)
+# OLLAMA_API_KEY        - Ollama API key (optional, for hosted ollama.ai)
+# OLLAMA_BASE_URL       - Ollama base URL (optional, default: https://api.ollama.ai/v1)
+# LLM_PROVIDER          - Which LLM to use: "openai" | "gemini" | "ollama" (auto-detects if unset)
+# KILL_SWITCH_SECRET    - Secret for HMAC signing approval tokens
+
+# ============================================================================
+# D1 Database
+# ============================================================================
+[[d1_databases]]
+binding = "DB"
+database_name = "nightwatcher-db"
+database_id = "placeholder-will-be-replaced-after-create"
+migrations_dir = "migrations"
+
+# ============================================================================
+# KV Namespace (hot cache)
+# ============================================================================
+[[kv_namespaces]]
+binding = "CACHE"
+id = "placeholder-will-be-replaced-after-create"
+
+# ============================================================================
+# R2 Bucket (artifacts storage)
+# ============================================================================
+[[r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "nightwatcher-artifacts"
+
+# ============================================================================
+# Durable Objects
+# ============================================================================
+[[durable_objects.bindings]]
+name = "SESSION"
+class_name = "SessionDO"
+
+[[durable_objects.bindings]]
+name = "MCP_AGENT"
+class_name = "NightwatcherMcpAgent"
+
+[[durable_objects.bindings]]
+name = "QUANTX_AGENT"
+class_name = "QuantxMcpAgent"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SessionDO", "NightwatcherMcpAgent", "QuantxMcpAgent"]
+
+# ============================================================================
+# Cron Triggers
+# ============================================================================
+[triggers]
+crons = [
+  # Event ingestion during market hours (UTC covers ET timezone variations)
+  "*/5 13-20 * * 1-5",
+  
+  # Daily market open prep (9:00 AM ET = 14:00 UTC)
+  "0 14 * * 1-5",
+  
+  # Daily market close cleanup (4:30 PM ET = 21:30 UTC)
+  "30 21 * * 1-5",
+  
+  # Midnight reset (reset daily counters)
+  "0 5 * * *",
+  
+  # Hourly cache refresh
+  "0 * * * *"
+]
+
+# ============================================================================
+# Build Configuration
+# ============================================================================
+[build]
+command = "npm run build"
+
+# ============================================================================
+# Development Configuration
+# ============================================================================
+[dev]
+port = 8787
+local_protocol = "http"
+
+# ============================================================================
+# Production Environment
+# ============================================================================
+[env.production]
+name = "nightwatcher-production"
+
+[env.production.vars]
+ENVIRONMENT = "production"
