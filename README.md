@@ -21,6 +21,12 @@ Most trading bots are trust-fund software: they generate signals, assume the sig
 > *Built on Cloudflare Workers. Secured by Durable Objects. Executed through Alpaca.*
 > *Zero marginal cost per trade. Zero blind trust, either.*
 
+## Interface Preview
+
+<p align="center">
+  <img src="assets/valkyrie_dashboard.png" alt="VALKYRIE Dashboard Interface" width="700" style="border: 2px solid #000000;">
+</p>
+
 ---
 
 ## Quick Start — 3 Steps, Paper Trading
