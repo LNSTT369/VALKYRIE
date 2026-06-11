@@ -11,7 +11,7 @@ import { handleRepoIngest, handleRepoStatus, handleRepoHistory } from "./api/rep
 import { handleKillSwitch } from "./api/killswitch";
 import { processCodifyQueue } from "./codification/consumer";
 import { processMCQueue } from "./execution/mc_worker";
-import { handleV3Regime, handleV3Risk, handleV3Signals, handleV3Config, handleV3Status, handleV3Strategies, handleSetupKeys, handleV3Logs, handleV3Sentiment } from "./api/v3_dashboard";
+import { handleV3Regime, handleV3Risk, handleV3Signals, handleV3Config, handleV3Status, handleV3Strategies, handleSetupKeys, handleV3Logs, handleV3Sentiment, handleV3Codifications, handleV3Simulations } from "./api/v3_dashboard";
 
 export { SessionDO } from "./durable-objects/session";
 export { ReconciliationDO } from "./durable-objects/reconciliation";
@@ -99,6 +99,14 @@ export default {
 
     if (url.pathname === "/api/v3/sentiment") {
       return handleV3Sentiment(request, env);
+    }
+
+    if (url.pathname === "/api/v3/codifications") {
+      return handleV3Codifications(request, env);
+    }
+
+    if (url.pathname === "/api/v3/simulations") {
+      return handleV3Simulations(request, env);
     }
 
     if (url.pathname === "/api/sys/activate" && request.method === "POST") {
