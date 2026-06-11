@@ -143,3 +143,25 @@ export interface StructuredEventRow {
 export function createD1Client(db: D1Database): D1Client {
   return new D1Client(db);
 }
+
+export interface VaultKeyRow {
+  tenant_id: string;
+  dek_wrapped: string;
+  dek_nonce: string;
+  created_at: string;
+}
+
+export interface ApiKeyRow {
+  key_id: string;
+  token_hash: string;
+  credibility_weight?: number;
+  revoked?: number;
+  alpaca_api_key?: string;
+  alpaca_api_secret?: string;
+  alpaca_paper?: number;
+  cred_ciphertext?: string;
+  cred_nonce?: string;
+  dek_id?: string;
+  created_at: string;
+}
+

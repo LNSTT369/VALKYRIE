@@ -15,17 +15,21 @@ import { calculateKelly } from "../risk/kelly";
 import { calculateVaR } from "../risk/var";
 import { calculateCorrelation } from "../risk/correlation";
 import { updateWatchlistFactorLoadings, getFactorLoadings } from "../risk/factor";
+import { runActiveStrategies } from "./execution_bridge";
+import { logError } from "../lib/errors";
+import { parseBoolean } from "../lib/utils";
 
 
 export async function handleCronEvent(cronId: string, env: Env): Promise<void> {
 
   switch (cronId) {
-    case "*/5 13-20 * * 1-5":
-      await runEventIngestion(env);
+    case "manual":
+      console.log("⚡ Executing manual system-wide activation pulse...");
+      await runActiveStrategies(env);
       break;
 
-    case "0 14 * * 1-5":
-      await runMarketOpenPrep(env);
+    case "*/5 13-20 * * 1-5":
+      await runEventIngestion(env);
       break;
 
     case "30 21 * * 1-5":
@@ -36,16 +40,50 @@ export async function handleCronEvent(cronId: string, env: Env): Promise<void> {
       await runMidnightReset(env);
       break;
 
-    case "0 * * * *":
-      await runHourlyCacheRefresh(env);
+    case "*/15 * * * *":
+      await runHourlyCacheRefresh(env); // Increased frequency from hourly to 15m
+      await runAutonomousFuturesHedging(env);
+      await runAgenticBugLoop(env);
       break;
 
-    case "*/15 * * * *":
-      await runAutonomousFuturesHedging(env);
+    case "* * * * 1-5":
+      console.log("⏰ Running live strategy execution loop...");
+      await runActiveStrategies(env);
       break;
 
     default:
       console.log(`Unknown cron: ${cronId}`);
+  }
+}
+
+async function runAgenticBugLoop(env: Env): Promise<void> {
+  console.log("Running Agentic Bug Loop (Observer)...");
+  const db = createD1Client(env.DB);
+  
+  try {
+    // Look for fatal or error logs in the last 15 minutes that haven't been resolved
+    const recentErrors = await db.execute<{id: string, module: string, event: string, payload: string}>(
+      `SELECT id, module, event, payload FROM error_log 
+       WHERE severity IN ('fatal', 'error') AND ts > ?
+       ORDER BY ts DESC LIMIT 5`,
+      [Date.now() - 15 * 60 * 1000]
+    );
+
+    if (recentErrors.length > 0) {
+      console.log(`Found ${recentErrors.length} recent issues. Passing to Reasoner Agent...`);
+      // Here we would invoke the LLM Reasoner to propose a fix via src/lib/llm_caller.ts 
+      // and potentially use github.ts to open a PR. 
+      // For now, we are just stubbing the observer loop structure.
+      for (const err of recentErrors) {
+        console.log(`[Observer] Reviewing error: ${err.module} - ${err.event}`);
+        // TODO: Call LLM with error payload and source code
+        // TODO: Call GitHub API to open a PR
+      }
+    } else {
+      console.log("No recent errors detected.");
+    }
+  } catch (error) {
+    await logError(env, "CRON", "runAgenticBugLoop", error, "fatal");
   }
 }
 
@@ -87,7 +125,7 @@ async function runEventIngestion(env: Env): Promise<void> {
 
     console.log(`Event ingestion complete: ${newEvents} new events`);
   } catch (error) {
-    console.error("Event ingestion error:", error);
+    await logError(env, "CRON", "runEventIngestion", error);
   }
 }
 
@@ -104,7 +142,7 @@ async function runMarketOpenPrep(env: Env): Promise<void> {
     console.log(`Cleaned up ${cleaned} expired approvals`);
 
   } catch (error) {
-    console.error("Market open prep error:", error);
+    await logError(env, "CRON", "runMarketOpenPrep", error);
   }
 }
 
@@ -124,7 +162,7 @@ async function runMarketCloseCleanup(env: Env): Promise<void> {
     console.log(`Cleaned up ${cleaned} expired approvals`);
 
   } catch (error) {
-    console.error("Market close cleanup error:", error);
+    await logError(env, "CRON", "runMarketCloseCleanup", error);
   }
 }
 
@@ -144,7 +182,7 @@ async function runMidnightReset(env: Env): Promise<void> {
     console.log(`Cleaned up ${cleanedSignals} stale signals`);
 
   } catch (error) {
-    console.error("Midnight reset error:", error);
+    await logError(env, "CRON", "runMidnightReset", error);
   }
 }
 
@@ -178,7 +216,7 @@ async function runHourlyCacheRefresh(env: Env): Promise<void> {
       try {
         await updateWatchlistFactorLoadings(db, alpaca, uniqueSymbols);
       } catch (err) {
-        console.error("Failed to update Fama-French loadings during cache refresh:", err);
+        await logError(env, "CRON", "runHourlyCacheRefresh:factorLoadings", err);
       }
     }
 
@@ -233,7 +271,7 @@ async function runHourlyCacheRefresh(env: Env): Promise<void> {
     }
     console.log("Hourly cache refresh completed successfully.");
   } catch (error) {
-    console.error("Hourly cache refresh error:", error);
+    await logError(env, "CRON", "runHourlyCacheRefresh", error);
   }
 }
 
@@ -243,6 +281,12 @@ async function runAutonomousFuturesHedging(env: Env): Promise<void> {
   const alpaca = createAlpacaProviders(env);
 
   try {
+    const riskState = await getRiskState(db);
+    if (riskState.kill_switch_active || parseBoolean(env.ALPACA_PAPER, true)) {
+      console.log("Hedging skipped: Kill-switch active or Paper trading enabled.");
+      return;
+    }
+
     const [account, positions] = await Promise.all([
       alpaca.trading.getAccount(),
       alpaca.trading.getPositions(),
@@ -290,7 +334,7 @@ async function runAutonomousFuturesHedging(env: Env): Promise<void> {
         const quote = await alpaca.marketData.getQuote(FALLBACK_HEDGE_SYMBOL);
         hedgePrice = quote.ask_price || quote.bid_price || 500;
       } catch (err) {
-        console.error("Failed to fetch quote for SPY, using fallback price $500", err);
+        await logError(env, "CRON", "runAutonomousFuturesHedging:quote", err);
         hedgePrice = 500;
       }
       
@@ -332,7 +376,7 @@ async function runAutonomousFuturesHedging(env: Env): Promise<void> {
       console.log("Portfolio beta is within safe bounds. No hedging action required.");
     }
   } catch (error) {
-    console.error("Failed to run autonomous futures hedging:", error);
+    await logError(env, "CRON", "runAutonomousFuturesHedging", error);
   }
 }
 

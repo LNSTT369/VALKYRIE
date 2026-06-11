@@ -6,7 +6,7 @@ export async function getPolicyConfig(
   db: D1Client
 ): Promise<PolicyConfig | null> {
   const row = await db.executeOne<PolicyConfigRow>(
-    `SELECT * FROM policy_config WHERE id = 1`
+    `SELECT * FROM policy_configs WHERE id = 1`
   );
 
   if (!row) {
@@ -23,7 +23,7 @@ export async function savePolicyConfig(
   const configJson = JSON.stringify(config);
 
   await db.run(
-    `INSERT INTO policy_config (id, config_json, updated_at)
+    `INSERT INTO policy_configs (id, config_json, updated_at)
      VALUES (1, ?, ?)
      ON CONFLICT(id) DO UPDATE SET config_json = excluded.config_json, updated_at = excluded.updated_at`,
     [configJson, nowISO()]

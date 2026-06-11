@@ -3,6 +3,14 @@ export interface Env {
   CACHE: KVNamespace;
   ARTIFACTS: R2Bucket;
   SESSION: DurableObjectNamespace;
+  CODIFY_JOB: DurableObjectNamespace;
+  RECONCILIATION: DurableObjectNamespace;
+  MCP_AGENT: DurableObjectNamespace;
+  QUANTX_AGENT: DurableObjectNamespace;
+  SIGNING_DO: DurableObjectNamespace;
+  CODIFY_QUEUE: Queue;
+  MC_QUEUE: Queue;
+  ASSETS: { fetch: (request: Request) => Promise<Response> };
 
   ALPACA_API_KEY: string;
   ALPACA_API_SECRET: string;
@@ -12,10 +20,13 @@ export interface Env {
   OLLAMA_API_KEY?: string;     // Hosted Ollama API key (optional for local)
   OLLAMA_BASE_URL?: string;    // Defaults to https://api.ollama.ai/v1 (or http://localhost:11434/v1 for local)
   OLLAMA_MODEL?: string;       // Model name, e.g. "gpt-oss:20b", "llama3.2"
+  LLM_MODEL?: string;          // Generic LLM model
   LLM_PROVIDER?: string;       // "openai" | "gemini" | "ollama" — explicit provider selection
   TWITTER_BEARER_TOKEN?: string;
   KILL_SWITCH_SECRET: string;
   SIGNAL_API_KEY?: string;
+  GITHUB_TOKEN?: string;
+  STRATEGY_PRIVATE_KEY?: string;
 
   ENVIRONMENT: string;
   FEATURE_LLM_RESEARCH: string;

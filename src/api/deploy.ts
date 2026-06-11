@@ -3,6 +3,7 @@ import { createD1Client } from "../storage/d1/client";
 import { generateId, nowISO, decryptText } from "../lib/utils";
 import { fetchStrategyFromGithub, compileStrategySandbox, runMockSimulation } from "../execution/cloner";
 import { createAlpacaProviders } from "../providers/alpaca";
+import { getMultiBarsWithCache } from "../utils/market_cache";
 
 function corsHeaders(): Record<string, string> {
   return {
@@ -13,6 +14,21 @@ function corsHeaders(): Record<string, string> {
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: corsHeaders() });
+}
+
+export async function handleStrategyList(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const auth = request.headers.get("Authorization");
+  const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!token) return jsonResponse({ ok: false, error: "UNAUTHORIZED" }, 401);
+
+  const db = createD1Client(env.DB);
+  const strategies = await db.execute(
+    "SELECT strategy_id, name, github_url, status, last_backtest_sharpe FROM active_strategies ORDER BY registered_at DESC"
+  );
+  return jsonResponse({ ok: true, strategies });
 }
 
 export async function handleStrategyDeploy(
@@ -111,10 +127,7 @@ export async function handleStrategyDeploy(
     d.setUTCDate(d.getUTCDate() - 45); // Get past 45 days to guarantee 30 trading days of data
     const startStr = d.toISOString().split("T")[0];
 
-    const rawBarsMap = await alpaca.marketData.getMultiBars(watchlist, "1Day", {
-      start: startStr,
-      limit: 30,
-    });
+    const rawBarsMap = await getMultiBarsWithCache(env.CACHE, alpaca, watchlist, "1Day", 30, startStr);
 
     // 6. Run Friction-Adjusted Backtest
     const sim = await runMockSimulation(sandbox.scanFn, rawBarsMap, 100000);

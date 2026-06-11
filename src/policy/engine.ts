@@ -16,6 +16,8 @@ import type { CorrelationResult } from "../risk/correlation";
 import type { RegimeState } from "../regime/types";
 import type { FactorExposure } from "../risk/factor";
 
+import type { TradeRow } from "../storage/d1/client";
+
 export interface PolicyContext {
   order?: OrderPreview; // Backwards-compatibility
   intent?: TradeIntent;   // Unified V3 intent contract
@@ -23,6 +25,7 @@ export interface PolicyContext {
   positions: Position[];
   clock: MarketClock;
   riskState: RiskState;
+  recentTrades?: TradeRow[];
 
   // Quantitative risk metrics (resolved asynchronously, evaluated synchronously)
   kellyResult?: KellyResult;
@@ -56,6 +59,7 @@ export class PolicyEngine {
     this.checkCooldown(ctx, violations);
     this.checkDailyLossLimit(ctx, violations);
     this.checkTradingHours(intent, ctx.clock, violations, warnings);
+    this.checkWashSale(intent, ctx, violations);
 
     if (intent.asset_class === "option" || intent.options) {
       // Validate options specific parameters
@@ -182,6 +186,39 @@ export class PolicyEngine {
         message: `Daily loss limit reached: ${(dailyLossPct * 100).toFixed(2)}% of equity`,
         current_value: dailyLossPct,
         limit_value: this.config.max_daily_loss_pct,
+      });
+    }
+  }
+
+  private checkWashSale(intent: TradeIntent, ctx: PolicyContext, violations: PolicyViolation[]): void {
+    if (intent.side !== "buy" || !ctx.recentTrades) return;
+
+    const symbol = intent.symbol.toUpperCase();
+    const WASH_SALE_PERIOD_DAYS = 30;
+    const now = new Date();
+
+    // Look for recent SELL trades for the same symbol that resulted in a loss
+    const recentLosingSells = ctx.recentTrades.filter(t => {
+      if (t.symbol.toUpperCase() !== symbol) return false;
+      if (t.side !== "sell") return false;
+
+      const tradeDate = new Date(t.created_at);
+      const diffDays = (now.getTime() - tradeDate.getTime()) / (1000 * 60 * 60 * 24);
+      if (diffDays > WASH_SALE_PERIOD_DAYS) return false;
+
+      // Check if it was a losing trade
+      // Note: We need realized P/L from the trade record. 
+      // If not explicitly stored, we can look at filled_avg_price vs cost basis (if we had it).
+      // For now, let's assume any sell within 30 days is a potential wash sale risk if we re-buy.
+      return true;
+    });
+
+    if (recentLosingSells.length > 0) {
+      violations.push({
+        rule: "wash_sale_risk",
+        message: `Wash sale risk: Recent SELL of ${symbol} detected within 30 days. Re-entering is restricted to prevent tax complications and churning.`,
+        current_value: recentLosingSells[0].created_at,
+        limit_value: `>${WASH_SALE_PERIOD_DAYS} days since last sell`,
       });
     }
   }

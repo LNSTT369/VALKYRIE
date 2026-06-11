@@ -16,6 +16,8 @@ export const R2Paths = {
 
   tradeSnapshot: (tradeId: string) =>
     `trades/${tradeId}/snapshot.json`,
+  mcSummary: (strategyId: string, jobId: string) =>
+    `monte-carlo/${strategyId}/${jobId}.json`,
 } as const;
 
 export function parseNewsPath(key: string): {
